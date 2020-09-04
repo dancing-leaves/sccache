@@ -117,8 +117,7 @@ counted_array!(pub static ARGS: [ArgInfo<gcc::ArgData>; _] = [
     flag!("-fno-color-diagnostics", NoDiagnosticsColorFlag),
     take_arg!("-fplugin", PathBuf, CanBeConcatenated('='), ExtraHashFile),
     flag!("-fprofile-instr-generate", ProfileGenerate),
-    // Can be either -fprofile-instr-use or -fprofile-instr-use=path
-    take_arg!("-fprofile-instr-use", OsString, Concatenated, TooHard),
+    take_arg!("-fprofile-instr-use", PathBuf, Concatenated('='), ExtraHashFile),
     take_arg!("-fsanitize-blacklist", PathBuf, Concatenated('='), ExtraHashFile),
     take_arg!("-gcc-toolchain", OsString, Separated, PassThrough),
     take_arg!("-include-pch", PathBuf, CanBeSeparated, PreprocessorArgumentPath),
@@ -192,6 +191,32 @@ mod test {
             "foo.o"
         );
         parses!("-c", "foo.c", "-gcc-toolchain", "somewhere", "-o", "foo.o");
+        parses!(
+            "-c",
+            "foo.c",
+            "-fprofile-instr-generate=somewhere.profdata",
+            "-o",
+            "foo.o"
+        );
+        parses!(
+            "-c",
+            "foo.c",
+            "-fprofile-instr-use=somewhere.profdata",
+            "-o",
+            "foo.o"
+        );
+    }
+
+    #[test]
+    fn test_clang_fprofile_instr_use() {
+        let a = parses!(
+            "-c",
+            "foo.c",
+            "-o",
+            "foo.o",
+            "-fprofile-instr-use=somewhere.profdata"
+        );
+        assert_eq!(ovec!["somewhere.profdata"], a.extra_hash_files);
     }
 
     #[test]

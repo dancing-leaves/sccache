@@ -119,6 +119,7 @@ ArgData! { pub
     Language(OsString),
     SplitDwarf,
     ProfileGenerate,
+    ProfileUse(PathBuf),
     TestCoverage,
     Coverage,
     ExtraHashFile(PathBuf),
@@ -168,7 +169,7 @@ counted_array!(pub static ARGS: [ArgInfo<ArgData>; _] = [
     flag!("-fplugin=libcc1plugin", TooHardFlag),
     flag!("-fprofile-arcs", ProfileGenerate),
     flag!("-fprofile-generate", ProfileGenerate),
-    take_arg!("-fprofile-use", OsString, Concatenated, TooHard),
+    take_arg!("-fprofile-use", PathBuf, Concatenated('='), ProfileUse),
     flag!("-frepo", TooHardFlag),
     flag!("-fsyntax-only", TooHardFlag),
     flag!("-ftest-coverage", TestCoverage),
@@ -232,6 +233,7 @@ where
     let mut language = None;
     let mut compilation_flag = OsString::new();
     let mut profile_generate = false;
+    let mut profile_use: Option<PathBuf> = None;
     let mut outputs_gcno = false;
     let mut xclangs: Vec<OsString> = vec![];
     let mut color_mode = ColorMode::Auto;
@@ -273,6 +275,7 @@ where
                     OsString::from(arg.flag_str().expect("Compilation flag expected"));
             }
             Some(ProfileGenerate) => profile_generate = true,
+            Some(ProfileUse(p)) => profile_use = Some(p.clone()),
             Some(TestCoverage) => outputs_gcno = true,
             Some(Coverage) => {
                 outputs_gcno = true;
@@ -325,6 +328,7 @@ where
         let args = match arg.get_data() {
             Some(SplitDwarf)
             | Some(ProfileGenerate)
+            | Some(ProfileUse(_))
             | Some(TestCoverage)
             | Some(Coverage)
             | Some(DiagnosticsColor(_))
@@ -389,6 +393,7 @@ where
             | Some(DiagnosticsColorFlag)
             | Some(NoDiagnosticsColorFlag)
             | Some(PassThrough(_))
+            | Some(ProfileUse(_))
             | Some(PassThroughPath(_)) => &mut common_args,
             Some(ExtraHashFile(path)) => {
                 extra_hash_files.push(path.clone());
@@ -466,6 +471,22 @@ where
         dependency_args.push(dep_target.unwrap_or_else(|| output.clone().into_os_string()));
     }
     outputs.insert("obj", output);
+
+    if profile_use.is_some() {
+        let obj_path = Path::new(outputs.get("obj").unwrap());
+        let mut obj_gcda_path = profile_use.unwrap();
+
+        obj_gcda_path.push(obj_path.parent().unwrap());
+
+        obj_gcda_path.push(
+            obj_path.file_stem().unwrap()
+                .to_str().unwrap().to_string() + ".gcda"
+        );
+
+        if obj_gcda_path.exists() {
+            extra_hash_files.push(obj_gcda_path);
+        }
+    }
 
     CompilerArguments::Ok(ParsedArguments {
         input: input.into(),
@@ -1187,24 +1208,6 @@ mod test {
             CompilerArguments::NotCompilation,
             parse_arguments_(
                 stringvec!["-shared", "foo.o", "-o", "foo.so", "bar.o"],
-                false
-            )
-        );
-    }
-
-    #[test]
-    fn test_parse_arguments_pgo() {
-        assert_eq!(
-            CompilerArguments::CannotCache("-fprofile-use", None),
-            parse_arguments_(
-                stringvec!["-c", "foo.c", "-fprofile-use", "-o", "foo.o"],
-                false
-            )
-        );
-        assert_eq!(
-            CompilerArguments::CannotCache("-fprofile-use", None),
-            parse_arguments_(
-                stringvec!["-c", "foo.c", "-fprofile-use=file", "-o", "foo.o"],
                 false
             )
         );

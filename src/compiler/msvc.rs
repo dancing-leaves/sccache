@@ -551,6 +551,7 @@ pub fn parse_arguments(
                 | Some(DiagnosticsColorFlag)
                 | Some(NoDiagnosticsColorFlag)
                 | Some(PassThrough(_))
+                | Some(ProfileUse(_))
                 | Some(PassThroughPath(_)) => &mut common_args,
 
                 Some(ProfileGenerate) => {
@@ -909,6 +910,18 @@ mod test {
         assert!(preprocessor_args.is_empty());
         assert!(common_args.is_empty());
         assert!(!msvc_show_includes);
+    }
+
+    #[test]
+    fn test_clang_fprofile_instr_use() {
+        let args = ovec!["/c", "foo.c", "/clang:-fprofile-instr-use=somewhere.profdata", "-Fofoo.obj"];
+        let ParsedArguments {
+            extra_hash_files, ..
+        } = match parse_arguments(args) {
+            CompilerArguments::Ok(args) => args,
+            o => panic!("Got unexpected parse result: {:?}", o),
+        };
+        assert_eq!(ovec!["somewhere.profdata"], extra_hash_files);
     }
 
     #[test]
